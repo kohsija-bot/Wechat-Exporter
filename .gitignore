@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+build/
+dist/
+release/
+*.spec
+*.log
+*.db
+*.db-wal
+*.db-shm
+!demo_archive/*.db
+.env
+keys.json
+exports/
+snapshot-*/
