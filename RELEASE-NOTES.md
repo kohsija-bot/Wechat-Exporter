@@ -5,5 +5,3 @@
 - Offline V2 DAT decoder can accept an explicitly imported existing image key; raster validation uses Pillow. No automatic image-key recovery is included.
 - Chat export checks packed metadata and matching resource DB rows, retaining content-hash verification.
 - Python source distribution only. Windows live GUI and video codec tests remain outstanding.
-
-Package test report: 17 passed, 1 skipped (Cryptodome unavailable), Linux/Python 3.13. Source files have not yet been imported into this repository.

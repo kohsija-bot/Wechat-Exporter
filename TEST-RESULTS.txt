@@ -1,0 +1,26 @@
+Linux / Python 3.13: syntax compilation succeeded.
+17 passed, 1 skipped (Cryptodome unavailable). No Windows or live WeChat GUI test.
+
+test_export (test_export.Test.test_export) ... ok
+test_account_cache_and_unknown_suffix (test_media_catalog.Tests.test_account_cache_and_unknown_suffix) ... ok
+test_cancel_and_changed_source (test_media_catalog.Tests.test_cancel_and_changed_source) ... ok
+test_duplicates_and_unverified (test_media_catalog.Tests.test_duplicates_and_unverified) ... ok
+test_extensionless_and_legacy (test_media_catalog.Tests.test_extensionless_and_legacy) ... ok
+test_scopes_and_export (test_media_catalog.Tests.test_scopes_and_export) ... ok
+test_import_and_wrong_key (test_media_v212.Tests.test_import_and_wrong_key) ... ok
+test_message_query_cancel_and_reuse (test_media_v212.Tests.test_message_query_cancel_and_reuse) ... ok
+test_real_raster_validation (test_media_v212.Tests.test_real_raster_validation) ... ok
+test_scan_cancellation (test_media_v212.Tests.test_scan_cancellation) ... ok
+test_v2_known_key (test_media_v212.Tests.test_v2_known_key) ... skipped 'Cryptodome not installed in this test environment'
+test_cancel_preserves_existing_file (test_v1.Tests.test_cancel_preserves_existing_file) ... ok
+test_group_and_multiple_shards (test_v1.Tests.test_group_and_multiple_shards) ... ok
+test_live_unsupported_platform (test_v1.Tests.test_live_unsupported_platform) ... ok
+test_mocked_live_adapter_plain_database (test_v1.Tests.test_mocked_live_adapter_plain_database) ... ok
+test_cancel_removes_staging (test_v2.Tests.test_cancel_removes_staging) ... ok
+test_formats_and_keyword (test_v2.Tests.test_formats_and_keyword) ... ok
+test_media_hash_and_quote (test_v2.Tests.test_media_hash_and_quote) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.226s
+
+OK (skipped=1)
