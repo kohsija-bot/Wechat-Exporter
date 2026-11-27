@@ -1,5 +1,5 @@
 """Local media inventory. No account credentials, network, or database changes."""
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from pathlib import Path
 from datetime import datetime
 import os, shutil, tempfile, json, hashlib
@@ -8,6 +8,8 @@ IMAGE={'.jpg','.jpeg','.png','.gif','.webp','.bmp','.tif','.tiff','.heic','.heif
 VIDEO={'.mp4','.mov','.m4v','.avi','.mkv','.webm','.3gp','.wmv','.mpeg','.mpg','.ts'}
 CACHE={'.dat','.wxgf','.pic','.thumb','.t','.h','.hd','.media','.video','.image','.cache','.bin'}
 SKIP={'.db','.sqlite','.sqlite3','.wal','.shm','.log','.ini','.json','.xml','.txt','.pdf','.docx','.xlsx','.zip','.exe','.dll'}
+ACCOUNT_MEDIA_FOLDERS=('msg/attach','msg/video','msg/image','msg/emoji','msg/emotion','msg/emoticon','msg/record','msg/recorditem','cache','emotion','business/emoticon','FileStorage/MsgAttach','FileStorage/Image','FileStorage/Video','FileStorage/CustomEmotion')
+
 V1=b'\x07\x08V1\x08\x07'
 V2=b'\x07\x08V2\x08\x07'
 @dataclass(frozen=True)
@@ -21,7 +23,7 @@ class Media:
     modified: float
     thumbnail: bool=False
     @property
-    def available(self):return self.status in ('Ready','Legacy image','V2 key supplied')
+    def available(self):return self.status in ('Ready','Legacy image','V2 key supplied','WXGF image')
 
 def signature(head):
     if head.startswith(b'\xff\xd8\xff'):return 'Image','.jpg'
@@ -42,14 +44,16 @@ def signature(head):
     if head.startswith(b'\x00\x00\x01\x00'):return 'Video','.mpg'
     return None
 
-def inspect(path,base,keys=()):
-    ext=path.suffix.lower();st=path.stat()
+def inspect(path,base,keys=(),st=None):
+    ext=path.suffix.lower();st=st if st is not None else path.stat()
     if not st.st_size:return None
     with path.open('rb') as f:head=f.read(64)
     identified=signature(head);status='Ready';thumb=path.stem.lower().endswith(('_t','_thumb','_thumbnail','_preview')) or ext in ('.thumb','.t') or any(x.lower() in ('thumb','thumbnail','thumbnails') for x in path.parts)
     if identified:
         kind,extension=identified
         if kind=='Video' and ext in VIDEO:extension=ext
+    elif head.startswith(b'wxgf'):
+        kind,extension,status='Image','.wxgf','WXGF image'
     elif head.startswith(V2):
         kind,extension,status='Image','.dat','V2 key supplied' if keys else 'Encrypted V2 image'
     elif head.startswith(V1) or (ext not in IMAGE|VIDEO and legacy_candidate(head) is not None):
@@ -64,24 +68,35 @@ def inspect(path,base,keys=()):
 def scan(root, folders=None, cancel=lambda:None, status=lambda _:None, keys=()):
     base=Path(root).resolve(strict=True);out=[];errors=0;seen=set();count=0
     if not base.is_dir():raise ValueError('Choose an existing local media folder.')
-    def err(_):
-        nonlocal errors;errors+=1
     for start in ([base/Path(x) for x in folders] if folders is not None else [base]):
         cancel()
-        if not start.is_dir() or not start.resolve().is_relative_to(base):continue
-        for directory,dirs,files in os.walk(start,followlinks=False,onerror=err):
-            cancel();d=Path(directory)
-            dirs[:]=[x for x in dirs if not (d/x).is_symlink() and not getattr(d/x,'is_junction',lambda:False)() and x.casefold() not in ('db_storage','logs','log') and not x.startswith(('Media_export_','.media-export-')) and (d/x).resolve().is_relative_to(base)]
-            for name in files:
-                cancel();count+=1
-                if count%200==0:status(f'Scanning local files… {count:,} checked, {len(out):,} media found')
-                p=d/name
-                if p.suffix.lower() in SKIP:continue
-                try:
-                    if p.is_symlink() or not p.is_file() or not p.resolve().is_relative_to(base) or p in seen:continue
-                    seen.add(p);r=inspect(p,base,keys)
-                    if r:out.append(r)
-                except (OSError,ValueError,ImportError):errors+=1
+        try:
+            if not start.is_dir() or not start.resolve().is_relative_to(base):continue
+            # Do not enter a symlink/junction even if it points inside the account.
+            if any(p.is_symlink() or getattr(p,'is_junction',lambda:False)() for p in (start,*start.parents) if p!=base and p.is_relative_to(base)):continue
+        except OSError:errors+=1;continue
+        pending=[start]
+        status(f'Scanning {start.relative_to(base).as_posix()}…')
+        while pending:
+            cancel();directory=pending.pop()
+            try:
+                with os.scandir(directory) as entries:
+                    for entry in entries:
+                        cancel();count+=1
+                        if count%200==0:status(f'Scanning local files… {count:,} checked, {len(out):,} media found')
+                        try:
+                            if entry.is_symlink() or getattr(entry,'is_junction',lambda:False)():continue
+                            if entry.is_dir(follow_symlinks=False):
+                                if entry.name.casefold() not in ('db_storage','logs','log','.venv') and not entry.name.startswith(('Media_export_','.media-export-')):pending.append(Path(entry.path))
+                                continue
+                            if not entry.is_file(follow_symlinks=False):continue
+                            p=Path(entry.path)
+                            if p.suffix.lower() in SKIP or p in seen:continue
+                            seen.add(p);r=inspect(p,base,keys,entry.stat(follow_symlinks=False))
+                            if r:out.append(r)
+                        except (OSError,ValueError,ImportError):errors+=1
+            except OSError:errors+=1
+    cancel()
     out.sort(key=lambda r:(-r.modified,r.relative.casefold()));return out,errors
 
 def legacy_candidate(head):
@@ -92,33 +107,45 @@ def legacy_candidate(head):
         if found and found[1] in ('.jpg','.png','.gif','.webp'):return key
     return None
 
-def image_bytes(item,keys=(),cancel=lambda:None):
+class ImageKeys(tuple):
+    """Existing user-supplied keys only; retain the optional independent XOR byte."""
+    def __new__(cls,keys=(),xor=None):
+        obj=super().__new__(cls,keys);obj.xor=xor;return obj
+
+def with_keys(item,keys):
+    if item.status in ('Encrypted V2 image','V2 key supplied'):
+        return replace(item,status='V2 key supplied' if keys else 'Encrypted V2 image')
+    return item
+
+def image_result(item,keys=(),cancel=lambda:None):
+    from wx4.image_render import render_image
     p=Path(item.path)
     if p.stat().st_size>128*1024*1024:raise ValueError('Image exceeds 128 MiB safety limit')
     cancel();raw=p.read_bytes();cancel()
-    if item.status=='Ready':blob=raw
-    elif raw.startswith((V1,V2)):
+    if raw.startswith(V2) and not keys:raise ValueError('Image access is not available for this account. Save the picture in WeChat, or use existing image access.')
+    if raw.startswith((V1,V2)):
         from wx4.offline_image import decode_dat
-        blob=None
+        failure=None
         for key in ([None] if raw.startswith(V1) else keys):
-            cancel();candidate=decode_dat(raw,aes_key=key)
-            if candidate and signature(candidate[:64]) and signature(candidate[:64])[0]=='Image':
-                try:validate_raster(candidate);blob=candidate;break
-                except ValueError:continue
+            cancel();candidate=decode_dat(raw,aes_key=key,xor_key=getattr(keys,'xor',None))
+            if candidate:
+                try:
+                    return render_image(candidate,cancel)
+                except ValueError as exc:failure=exc
+        if failure is not None:raise failure
+        raise ValueError('Image access does not match, image data is incomplete, or format conversion failed.')
+    if item.status in ('Ready','WXGF image'):candidate=raw
     else:
-        key=legacy_candidate(raw[:64]);blob=raw.translate(bytes(x^key for x in range(256))) if key is not None else None
-    found=signature(blob[:64]) if blob else None
-    if not found or found[0]!='Image':raise ValueError('Image could not be decoded. V2 may need the matching image key or an unsupported codec.')
-    cancel();return blob,found[1]
+        key=legacy_candidate(raw[:64]);candidate=raw.translate(bytes(x^key for x in range(256))) if key is not None else None
+    if not candidate:raise ValueError('Unsupported or damaged local image')
+    return render_image(candidate,cancel)
+
+def image_bytes(item,keys=(),cancel=lambda:None):
+    blob,ext,_=image_result(item,keys,cancel);return blob,ext
 
 def validate_raster(blob):
-    # Verify decoded pixels, not merely a plausible file header.
-    from PIL import Image
-    import io
-    try:
-        with Image.open(io.BytesIO(blob)) as img:img.verify()
-        with Image.open(io.BytesIO(blob)) as img:img.load()
-    except Exception as exc:raise ValueError('Decoded image failed validation') from exc
+    from wx4.image_render import validate_image
+    validate_image(blob)
 
 def load_image_keys(path):
     # Import only an existing image-key file supplied explicitly by the user.
@@ -126,11 +153,15 @@ def load_image_keys(path):
     p=Path(path)
     if p.stat().st_size>65536:raise ValueError('Image key file is too large')
     raw=p.read_bytes()
-    if len(raw)==16:return (raw,)
+    if len(raw)==16:return ImageKeys((raw,))
+    xor=None
     try:
         value=json.loads(raw.decode('utf-8-sig'))
         values=value.get('keys',[]) if isinstance(value,dict) else []
+        if isinstance(value,dict) and value.get('xor') is not None:
+            xor=value['xor']
     except (ValueError,UnicodeError):values=[raw.decode('ascii').strip()]
+    if xor is not None and (type(xor) is not int or not 0<=xor<=255):raise ValueError('Invalid XOR byte in image key file')
     keys=[]
     if not isinstance(values,list):raise ValueError('Invalid image key list')
     for v in values[:16]:
@@ -139,7 +170,29 @@ def load_image_keys(path):
         except ValueError:continue
         if len(k)==16 and k not in keys:keys.append(k)
     if not keys:raise ValueError('No supported 16-byte image key in the supplied file')
-    return tuple(keys)
+    return ImageKeys(keys,xor)
+
+def existing_account_image_keys(account, wxid, cancel=lambda:None, localappdata=None):
+    """Reuse only an existing Moect image-key cache for this exact account.
+
+    No process access, broad searches, new key recovery, or writing key files.
+    A cache hit is not proof that any specific image can be decoded.
+    """
+    local = localappdata or os.environ.get('LOCALAPPDATA')
+    if not local or not account or not wxid:
+        return ImageKeys()
+    identity = hashlib.sha256((str(Path(account).resolve())+'\0'+wxid).encode()).hexdigest()
+    for app in ('Moect','WeChatExporter'):
+        cancel()
+        root = Path(local)/app
+        # The upstream default cache root. Custom storage stays an explicit import.
+        path = root/'media-cache'/identity/'image-keys.json'
+        try:
+            if path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(root.resolve()):
+                return load_image_keys(path)
+        except (OSError, ValueError, UnicodeError, RuntimeError):
+            continue
+    return ImageKeys()
 
 def export(items,output,cancel=lambda:None,progress=lambda *_:None,status=lambda _:None,keys=()):
     output=Path(output);output.mkdir(parents=True,exist_ok=True);stage=Path(tempfile.mkdtemp(prefix='.media-export-',dir=output));target=None;report=[];saved=0
@@ -153,7 +206,7 @@ def export(items,output,cancel=lambda:None,progress=lambda *_:None,status=lambda
                 folder=stage/('Images' if item.kind=='Image' else 'Videos');folder.mkdir(exist_ok=True)
                 stem=p.stem[:80].rstrip(' .') or 'media';prefix=hashlib.sha256(item.relative.encode('utf-8')).hexdigest()[:12];ext=item.extension
                 if item.kind=='Image' and item.status!='Ready':
-                    blob,ext=image_bytes(item,keys,cancel);validate_raster(blob);dest=folder/(prefix+'_'+stem+ext);dest.write_bytes(blob)
+                    blob,ext,quality=image_result(item,keys,cancel);dest=folder/(prefix+'_'+stem+ext);dest.write_bytes(blob);entry['quality']=quality
                 else:
                     dest=folder/(prefix+'_'+stem+ext)
                     with p.open('rb') as src,dest.open('xb') as dst:

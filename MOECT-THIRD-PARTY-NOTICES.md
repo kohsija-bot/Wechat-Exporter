@@ -90,3 +90,6 @@ The shared calendar/time custom element is implemented in this repository and bu
 ## Export libraries
 
 XlsxWriter 3.2.9 creates streaming XLSX records under its BSD-2-Clause license. pyzipper 0.3.6 creates AES-encrypted ZIP archives under its MIT license. Their original license texts are included in THIRD_PARTY_LICENSES. Archive password memory uses Windows DPAPI for the current Windows user.
+
+## Local image rendering (v2.1.5)
+`wx4/image_render.py` adapts `raster_payload` and the HEVC NAL grouping approach from Moect `core/media_codec.py` (source https://github.com/mofan6/Moect/blob/main/core/media_codec.py, GPL-3.0, original contributors). FFmpeg is invoked locally via the separately installed imageio-ffmpeg dependency; the source ZIP does not bundle FFmpeg binaries.

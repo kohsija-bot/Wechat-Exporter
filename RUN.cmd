@@ -7,7 +7,7 @@ py -3.14 -c "import struct; assert struct.calcsize('P')==8" || goto fail
 if not exist ".venv\Scripts\python.exe" (
   py -3.14 -m venv .venv || goto fail
 )
-".venv\Scripts\python.exe" -c "import PySide6,psutil,Cryptodome,zstandard,xlsxwriter,PIL" >nul 2>&1
+".venv\Scripts\python.exe" -c "import PySide6,psutil,Cryptodome,zstandard,xlsxwriter,PIL,imageio_ffmpeg" >nul 2>&1
 if errorlevel 1 (
   echo Installing required packages from PyPI. Internet is required once.
   ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt || goto fail

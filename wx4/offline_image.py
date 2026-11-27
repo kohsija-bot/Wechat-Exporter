@@ -89,8 +89,7 @@ def decode_dat(data: bytes, aes_key: bytes | None=None, xor_key: int | None=None
     prefix=decrypt_dat_prefix(data,key)
     if prefix is None:return None
     if xor_ct:
-        xk=infer_xor_key(data,prefix)
-        if xk is None:xk=xor_key
+        xk=xor_key if xor_key is not None else infer_xor_key(data,prefix)
         if xk is None:return None
         return prefix+mid+bytes(b^(xk&255) for b in xor_ct)
     return prefix+mid

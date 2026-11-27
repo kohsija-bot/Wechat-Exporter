@@ -9,6 +9,7 @@ from rich_export import batch, FORMATS
 from PySide6.QtGui import QDesktopServices, QPalette, QColor, QShortcut, QKeySequence
 from PySide6.QtCore import QUrl
 import live
+import ui_theme as ui
 
 class Cancelled(Exception): pass
 class Worker(QThread):
@@ -24,33 +25,30 @@ class Worker(QThread):
 
 class Window(QMainWindow):
     def __init__(self):
-        super().__init__();self.setWindowTitle('WeChat Exporter | v2.1.2 • Local chat archive');self.resize(1100,740)
+        super().__init__();self.setWindowTitle('WeChat Exporter | v2.2.0 Beta • Local workspace');self.resize(1180,800)
         self.worker=None;self.root='';self.wxid='';self.owned=False;self.account=None;self.pending=None;self.settings=QSettings('LocalTools','WeChatExporterV2');self.last_output='';self.image_keys=() 
-        w=QWidget();self.setCentralWidget(w);v=QVBoxLayout(w);v.setContentsMargins(18,16,18,16);v.setSpacing(10)
-        title=QLabel('WeChat Exporter');title.setStyleSheet('font-size:22px;font-weight:600;');v.addWidget(title)
-        v.addWidget(QLabel('Local chat history • Windows WeChat 4.x • Offline'))
-        top=QHBoxLayout();self.connect=QPushButton('Connect WeChat');self.connect.clicked.connect(lambda:self.detect());self.browse_data=QPushButton('Browse data folder');self.browse_data.clicked.connect(self.choose_data);self.open=QPushButton('Open archive');self.open.clicked.connect(self.choose);self.refresh=QPushButton('Refresh');self.refresh.clicked.connect(self.reconnect)
+        w=QWidget();self.setCentralWidget(w);v=QVBoxLayout(w);v.setContentsMargins(22,18,22,18);v.setSpacing(10)
+        title=ui.label('WeChat Exporter','title');v.addWidget(title)
+        v.addWidget(ui.label('LOCAL WORKSPACE  /  Chat history & media  ·  Offline','muted'))
+        top=QHBoxLayout();self.connect=ui.role(QPushButton('Connect WeChat'),'primary');self.connect.clicked.connect(lambda:self.detect());self.browse_data=QPushButton('Browse data folder');self.browse_data.clicked.connect(self.choose_data);self.open=QPushButton('Open archive');self.open.clicked.connect(self.choose);self.refresh=QPushButton('Refresh');self.refresh.clicked.connect(self.reconnect)
         self.media_browser=QPushButton("Media Browser");self.media_browser.clicked.connect(self.open_media_browser)
         for btn in (self.connect,self.browse_data,self.open,self.refresh,self.media_browser):top.addWidget(btn)
         top.addStretch();self.theme=QComboBox();self.theme.addItems(["System","Light","Dark"]);self.theme.setCurrentText(self.settings.value("theme","System"));self.theme.currentTextChanged.connect(self.apply_theme);top.addWidget(self.theme);v.addLayout(top);self.source=QLineEdit();self.source.setReadOnly(True);self.source.setPlaceholderText('No account or archive connected');v.addWidget(self.source)
-        self.warning=QLabel('');self.warning.setWordWrap(True);self.warning.setStyleSheet('color:#ab6700;');v.addWidget(self.warning)
-        split=QSplitter();left=QWidget();lv=QVBoxLayout(left);lv.setContentsMargins(0,0,4,0);lv.addWidget(QLabel('Conversations'));self.search=QLineEdit();self.search.setPlaceholderText('Search name or ID');self.search.textChanged.connect(self.filter);lv.addWidget(self.search);self.category=QComboBox();self.category.addItems(["All chats","Private chats","Groups"]);self.category.currentTextChanged.connect(lambda _:self.filter(self.search.text()));lv.addWidget(self.category);self.list=QListWidget();self.list.currentItemChanged.connect(self.preview);lv.addWidget(self.list);b=QHBoxLayout()
+        self.warning=QLabel('');self.warning.setWordWrap(True);ui.role(self.warning,'warning');v.addWidget(self.warning)
+        split=QSplitter();lv=QVBoxLayout();lv.setContentsMargins(12,12,12,12);lv.setSpacing(8);left=ui.panel(lv);lv.addWidget(ui.label('Conversations'));self.search=QLineEdit();self.search.setPlaceholderText('Search name or ID');self.search.textChanged.connect(self.filter);lv.addWidget(self.search);self.category=QComboBox();self.category.addItems(["All chats","Private chats","Groups"]);self.category.currentTextChanged.connect(lambda _:self.filter(self.search.text()));lv.addWidget(self.category);self.list=QListWidget();self.list.currentItemChanged.connect(self.preview);lv.addWidget(self.list);b=QHBoxLayout()
         self.select=QPushButton('Select visible');self.select.clicked.connect(lambda:self.check(Qt.CheckState.Checked));b.addWidget(self.select);self.clear=QPushButton('Clear all');self.clear.clicked.connect(lambda:self.check(Qt.CheckState.Unchecked));b.addWidget(self.clear);lv.addLayout(b);split.addWidget(left)
-        right=QWidget();rv=QVBoxLayout(right);rv.setContentsMargins(4,0,0,0);rv.addWidget(QLabel('Preview — latest 100 matching messages'));queryrow=QHBoxLayout();self.keyword=QLineEdit();self.keyword.setPlaceholderText('Message keyword (preview and export)');self.keyword.returnPressed.connect(lambda:self.preview(self.list.currentItem(),None));queryrow.addWidget(self.keyword);self.find=QPushButton('Find');self.find.clicked.connect(lambda:self.preview(self.list.currentItem(),None));queryrow.addWidget(self.find);rv.addLayout(queryrow);self.text=QPlainTextEdit();self.text.setReadOnly(True);self.text.setPlaceholderText('Select a conversation to preview.');rv.addWidget(self.text);split.addWidget(right);split.setSizes([350,700]);v.addWidget(split,1)
-        date=QHBoxLayout();self.use_dates=QCheckBox('Filter export dates (local time)');self.start=QDateEdit(QDate.currentDate().addMonths(-3));self.end=QDateEdit(QDate.currentDate());self.start.setCalendarPopup(True);self.end.setCalendarPopup(True);self.start.setDisplayFormat('yyyy-MM-dd');self.end.setDisplayFormat('yyyy-MM-dd');date.addWidget(self.use_dates);date.addWidget(self.start);date.addWidget(QLabel('to'));date.addWidget(self.end);date.addStretch();v.addLayout(date)
-        options=QHBoxLayout();self.mode=QComboBox();self.mode.addItems(['Quick: text only','Full: all message types']);self.mode.setCurrentIndex(int(self.settings.value('mode',0)));self.media=QCheckBox('Copy available local media');self.media.setChecked(True);self.media.setEnabled(self.mode.currentIndex()==1);self.mode.currentIndexChanged.connect(lambda n:self.media.setEnabled(n==1 and self.worker is None));self.zip=QCheckBox('ZIP archive');options.addWidget(self.mode);options.addWidget(self.media);options.addWidget(self.zip);options.addStretch();v.addLayout(options);row=QHBoxLayout();self.folder=QLineEdit(self.settings.value('output',str(Path.home()/'Documents'/'WeChat Export')));browse=QPushButton('Browse');browse.clicked.connect(self.output);self.fmt=QComboBox();self.fmt.addItems(FORMATS);self.fmt.setCurrentText(self.settings.value('format','html'));self.export=QPushButton('Export checked chats');self.export.clicked.connect(self.do_export);row.addWidget(QLabel('Output'));row.addWidget(self.folder,1);row.addWidget(browse);row.addWidget(self.fmt);row.addWidget(self.export);self.open_result=QPushButton("Open result");self.open_result.setEnabled(False);self.open_result.clicked.connect(self.show_result);row.addWidget(self.open_result);v.addLayout(row)
-        foot=QHBoxLayout();self.bar=QProgressBar();self.bar.setRange(0,1);self.bar.setValue(0);foot.addWidget(self.bar,1);self.cancel=QPushButton('Cancel (Esc)');self.esc=QShortcut(QKeySequence('Esc'),self);self.esc.setContext(Qt.ShortcutContext.WindowShortcut);self.esc.activated.connect(self.cancel_job);self.cancel.clicked.connect(self.cancel_job);foot.addWidget(self.cancel);v.addLayout(foot);self.status=QLabel('Sign in to your own WeChat Desktop account, then click Connect WeChat.');self.status.setWordWrap(True);v.addWidget(self.status);self.set_busy(False);self.system_palette=QApplication.palette();self.apply_theme(self.theme.currentText())
+        rv=QVBoxLayout();rv.setContentsMargins(14,12,14,12);rv.setSpacing(8);right=ui.panel(rv);rv.addWidget(ui.label('Message preview'));rv.addWidget(ui.label('Latest 100 matching messages','muted'));queryrow=QHBoxLayout();self.keyword=QLineEdit();self.keyword.setPlaceholderText('Message keyword (preview and export)');self.keyword.returnPressed.connect(lambda:self.preview(self.list.currentItem(),None));queryrow.addWidget(self.keyword);self.find=QPushButton('Find');self.find.clicked.connect(lambda:self.preview(self.list.currentItem(),None));queryrow.addWidget(self.find);rv.addLayout(queryrow);self.text=QPlainTextEdit();self.text.setReadOnly(True);self.text.setPlaceholderText('Select a conversation to preview.');rv.addWidget(self.text);split.addWidget(right);split.setHandleWidth(10);split.setSizes([340,780]);v.addWidget(split,1)
+        v.addWidget(ui.label("Export settings"));date=QHBoxLayout();self.use_dates=QCheckBox('Filter export dates (local time)');self.start=QDateEdit(QDate.currentDate().addMonths(-3));self.end=QDateEdit(QDate.currentDate());self.start.setCalendarPopup(True);self.end.setCalendarPopup(True);self.start.setDisplayFormat('yyyy-MM-dd');self.end.setDisplayFormat('yyyy-MM-dd');date.addWidget(self.use_dates);date.addWidget(self.start);date.addWidget(QLabel('to'));date.addWidget(self.end);date.addStretch();v.addLayout(date)
+        options=QHBoxLayout();self.mode=QComboBox();self.mode.addItems(['Quick: text only','Full: all message types']);self.mode.setCurrentIndex(int(self.settings.value('mode',0)));self.media=QCheckBox('Copy available local media');self.media.setChecked(True);self.media.setEnabled(self.mode.currentIndex()==1);self.mode.currentIndexChanged.connect(lambda n:self.media.setEnabled(n==1 and self.worker is None));self.zip=QCheckBox('ZIP archive');options.addWidget(self.mode);options.addWidget(self.media);options.addWidget(self.zip);options.addStretch();v.addLayout(options);row=QHBoxLayout();self.folder=QLineEdit(self.settings.value('output',str(Path.home()/'Documents'/'WeChat Export')));browse=QPushButton('Browse');browse.clicked.connect(self.output);self.fmt=QComboBox();self.fmt.addItems(FORMATS);self.fmt.setCurrentText(self.settings.value('format','html'));self.export=ui.role(QPushButton('Export checked chats'),'primary');self.export.clicked.connect(self.do_export);row.addWidget(QLabel('Output'));row.addWidget(self.folder,1);row.addWidget(browse);row.addWidget(self.fmt);row.addWidget(self.export);self.open_result=QPushButton("Open result");self.open_result.setEnabled(False);self.open_result.clicked.connect(self.show_result);row.addWidget(self.open_result);v.addLayout(row)
+        foot=QHBoxLayout();self.bar=QProgressBar();self.bar.setRange(0,1);self.bar.setValue(0);foot.addWidget(self.bar,1);self.cancel=QPushButton('Cancel (Esc)');self.esc=QShortcut(QKeySequence('Esc'),self);self.esc.setContext(Qt.ShortcutContext.WindowShortcut);self.esc.activated.connect(self.cancel_job);self.cancel.clicked.connect(self.cancel_job);foot.addWidget(self.cancel);v.addLayout(foot);self.status=QLabel('Sign in to your own WeChat Desktop account, then click Connect WeChat.');self.status.setWordWrap(True);ui.role(self.status,'status');v.addWidget(self.status);self.set_busy(False);self.system_palette=QApplication.palette();self.apply_theme(self.theme.currentText())
     def open_media_browser(self):
         from media_browser import MediaBrowser
         item=self.list.currentItem();chat=item.data(Qt.ItemDataRole.UserRole) if item else None
         account=self.account.get("path") if self.account else None
-        dlg=MediaBrowser(self,account,chat,self.folder.text(),self.image_keys);dlg.exec();self.image_keys=dlg.keys if account else ()
+        dlg=MediaBrowser(self,account,chat,self.folder.text(),self.image_keys,wxid=self.wxid);dlg.exec();self.image_keys=dlg.keys if account else ()
     def apply_theme(self,name):
         self.settings.setValue("theme",name)
-        if name=="System": QApplication.setPalette(self.system_palette);return
-        p=QPalette();dark=name=="Dark"
-        for role,c in {QPalette.ColorRole.Window: "#25282c" if dark else "#f4f5f6",QPalette.ColorRole.Base:"#1b1e22" if dark else "#ffffff",QPalette.ColorRole.AlternateBase:"#30343a" if dark else "#edf0f2",QPalette.ColorRole.WindowText:"#eeeeee" if dark else "#202428",QPalette.ColorRole.Text:"#eeeeee" if dark else "#202428",QPalette.ColorRole.Button:"#343940" if dark else "#ffffff",QPalette.ColorRole.ButtonText:"#eeeeee" if dark else "#202428",QPalette.ColorRole.Highlight:"#16865b",QPalette.ColorRole.HighlightedText:"#ffffff"}.items():p.setColor(role,QColor(c))
-        QApplication.setPalette(p)
+        ui.apply(name,self.system_palette)
     def show_result(self):
         if self.last_output:
             p=Path(self.last_output);QDesktopServices.openUrl(QUrl.fromLocalFile(str(p if p.is_dir() else p.parent)))
@@ -89,12 +87,16 @@ class Window(QMainWindow):
             root,wxid,warning=live.make_snapshot(a,s,c)
             try:
                 d=open_archive(root,wxid,cancel=c)
-                try:rows=sessions(d,c)
+                try:
+                    rows=sessions(d,c);wxid=d.wxid or wxid
                 finally:d.close()
-                c();return root,wxid,rows,warning
+                from media_catalog import existing_account_image_keys
+                keys=existing_account_image_keys(a.get("path"),wxid,c)
+                c();return root,wxid,rows,warning,keys
             except BaseException:shutil.rmtree(root,ignore_errors=True);raise
         def done(result):
-            root,wxid,rows,warning=result;self.load_rows(root,wxid,rows,True,a,warning)
+            root,wxid,rows,warning,keys=result;self.load_rows(root,wxid,rows,True,a,warning)
+            if keys:self.image_keys=keys
         self.job(work,done)
     def reconnect(self):
         if self.account:self.connect_account(dict(self.account))

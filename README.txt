@@ -1,4 +1,4 @@
-WeChat Exporter 2.1.2-beta — Windows x64, Python 3.14 + PySide6
+WeChat Exporter 2.2.0-beta — Windows x64, Python 3.14 + PySide6
 ========================================================
 Independent GPL-3.0 utility, not affiliated with Tencent or Moect.
 
@@ -59,3 +59,18 @@ See LICENSE and MOECT-THIRD-PARTY-NOTICES.md. Original source notices retained.
 The application is distributed as Python source; no Windows EXE is included.
 
 Media Browser: see README-MEDIA.txt for V2 image keys and Esc cancellation.
+
+## 2.1.4: automatic reuse of existing image access
+For the selected account, the app checks only the account-specific default Moect/legacy cache on Connect and Media Browser scan. Use Refresh image access after using Moect for the same account. Custom cache paths require the existing file import. No new key recovery, process access added, key persistence, or guarantee of decryption. WXGF was unsupported in v2.1.4 (see v2.1.5 below).
+
+## 2.1.5: local image rendering compatibility
+- Shared raster validation and cache trailer removal based on Moect's raster_payload.
+- Already accessible WXGF HEVC images can be rendered as PNG first frames via local FFmpeg. A first frame is not the original animated image; the preview and export manifest identify this quality.
+- FFmpeg is installed as a local dependency with RUN.cmd (imageio-ffmpeg); an existing system FFmpeg is also supported. Conversion is bounded and cancellable.
+- Existing account image access is reused as before. Refresh image access checks up to three existing V2 files and reports whether a sample actually opens. No new access is recovered, no keys are written or transmitted, and no process access is added.
+- Chat exports verify the original content hash before rendering. Missing or encrypted images without matching access still cannot be opened.
+- Synthetic tests cover complete raster boundaries, HEVC first-frame conversion and export; real Windows GUI and V2 recovery remain unverified.
+
+## 2.2.0: Fluent-inspired desktop UI
+
+Shared light/dark/system theme, emerald accent, clearer section hierarchy, chat and preview panels, primary actions, and denser media table without vertical grid lines. Native window chrome and existing workflow remain. No new dependencies or media engine changes. The System option follows the OS palette captured at startup.

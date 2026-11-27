@@ -1,8 +1,8 @@
-WeChat Exporter 2.1.2-beta — Media Browser
+WeChat Exporter 2.2.0-beta — Media Browser
 
 1. Extract the full source distribution; run RUN.cmd (Python 3.14 x64).
 2. Connect to your own WeChat account. Open Media Browser.
-3. Choose Current account — all local media, then Scan / Refresh. Keep
+3. Choose Current account — known media folders, then Scan / Refresh. Keep
    Available only unchecked to see locked and unverified media.
 4. Select a row for preview. Video playback depends on the available codec.
    Files with nonstandard suffixes are prepared in a temporary local folder.
@@ -33,7 +33,27 @@ mandatory to prevent incorrect cross-chat attachments. Some resources will
 still be missing. Media Browser operates independently of chat associations.
 
 LIMITATIONS
-No automatic V2 key recovery, WXGF/HEVC image conversion or media downloads.
+No automatic V2 key recovery or media downloads. WXGF first-frame conversion is supported with FFmpeg.
 Codec compatibility and Esc shortcuts have not been exercised on Windows.
 Preview temporary files are cleaned on normal changes/close, but abnormal
 termination can leave temporary files. Exports are not encrypted.
+
+2.1.3: Fix QDialog.finished / QThread.finished collision; target known media
+folders with scandir; retain imported JSON XOR byte; no full rescan on key import.
+To search an unusual folder, choose Choose a local folder. A key is still needed
+for V2 files; no automatic key recovery or WXGF conversion is included.
+
+## 2.1.4: automatic reuse of existing image access
+For the selected account, the app checks only the account-specific default Moect/legacy cache on Connect and Media Browser scan. Use Refresh image access after using Moect for the same account. Custom cache paths require the existing file import. No new key recovery, process access added, key persistence, or guarantee of decryption. WXGF was unsupported in v2.1.4 (see v2.1.5 below).
+
+## 2.1.5: local image rendering compatibility
+- Shared raster validation and cache trailer removal based on Moect's raster_payload.
+- Already accessible WXGF HEVC images can be rendered as PNG first frames via local FFmpeg. A first frame is not the original animated image; the preview and export manifest identify this quality.
+- FFmpeg is installed as a local dependency with RUN.cmd (imageio-ffmpeg); an existing system FFmpeg is also supported. Conversion is bounded and cancellable.
+- Existing account image access is reused as before. Refresh image access checks up to three existing V2 files and reports whether a sample actually opens. No new access is recovered, no keys are written or transmitted, and no process access is added.
+- Chat exports verify the original content hash before rendering. Missing or encrypted images without matching access still cannot be opened.
+- Synthetic tests cover complete raster boundaries, HEVC first-frame conversion and export; real Windows GUI and V2 recovery remain unverified.
+
+## 2.2.0: Fluent-inspired desktop UI
+
+Shared light/dark/system theme, emerald accent, clearer section hierarchy, chat and preview panels, primary actions, and denser media table without vertical grid lines. Native window chrome and existing workflow remain. No new dependencies or media engine changes. The System option follows the OS palette captured at startup.

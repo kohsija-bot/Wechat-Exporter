@@ -74,18 +74,18 @@ class LocalMedia:
                 encrypted=True
                 try:
                     if path.stat().st_size>64*1024*1024:continue
-                    from wx4.offline_image import decode_dat,sniff_ext
+                    from wx4.offline_image import decode_dat
+                    from wx4.image_render import render_image,raster_payload
                     raw=path.read_bytes();self.cancel();blob=decode_dat(raw)
                     if not blob:
                         for key in self.image_keys:
-                            self.cancel();blob=decode_dat(raw,aes_key=key)
-                            if blob and hashlib.md5(blob).hexdigest() in hashes:break
+                            self.cancel();blob=decode_dat(raw,aes_key=key,xor_key=getattr(self.image_keys,'xor',None))
+                            if blob and (hashlib.md5(blob).hexdigest() in hashes or hashlib.md5(raster_payload(blob) or b'').hexdigest() in hashes):break
                             blob=None
-                    if not blob or hashlib.md5(blob).hexdigest() not in hashes:continue
-                    extension=sniff_ext(blob)
-                    if extension not in IMAGE:continue
+                    if not blob or (hashlib.md5(blob).hexdigest() not in hashes and hashlib.md5(raster_payload(blob) or b'').hexdigest() not in hashes):continue
+                    blob,extension,quality=render_image(blob,self.cancel)
                     dest=self.out/'media'/ (hashlib.sha256(blob).hexdigest()[:24]+extension);dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(blob)
-                    return {'kind':kind,'status':'saved','path':dest.relative_to(self.out).as_posix()}
+                    return {'kind':kind,'status':'saved','path':dest.relative_to(self.out).as_posix(),'quality':quality}
                 except (OSError,ImportError,ValueError):continue
             if ext in ('.dat','.wxgf','.pic'):encrypted=True;continue
             if kind in ('image','emoji') and ext not in IMAGE:continue
